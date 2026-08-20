@@ -1,33 +1,33 @@
-# Technical Defense — Lab 19
+# Thuyết minh kỹ thuật — Lab 19
 
-## 1. Coreference
+## 1. Phân giải đồng tham chiếu
 
-Coreference is conservative: only a pronoun or generic reference whose antecedent is explicit in the same chunk is resolved. Ambiguous mentions remain unchanged and are logged in `unresolved_mentions`. This prevents a false coreference from becoming a false graph edge.
+Cơ chế coreference chỉ thay thế đại từ hoặc tham chiếu chung khi tiền ngữ xuất hiện rõ ràng trong cùng một chunk. Trường hợp mơ hồ được giữ nguyên và ghi vào `unresolved_mentions`. Cách làm này ngăn việc phân giải sai tạo thành cạnh sai trong đồ thị.
 
-## 2. Near dedup
+## 2. Near Dedup
 
-The pipeline uses word 5-shingles with MinHash (64 permutations) and LSH (16 bands × 4 rows). Exact Jaccard `>= 0.82` is required before merging. LSH generates candidates; it does not itself merge records. `near_dedup_pairs` stores both IDs, Jaccard, merge decision, audit label and notes. The longest article is retained as canonical.
+Pipeline dùng word 5-shingles, MinHash với 64 phép băm và LSH gồm 16 bands × 4 rows. Chỉ merge khi Jaccard chính xác `>= 0.82`. LSH chỉ sinh cặp ứng viên, không tự quyết định merge. Bảng `near_dedup_pairs` lưu hai ID, điểm Jaccard, quyết định merge, nhãn audit và ghi chú. Bài viết dài nhất trong cluster được giữ làm bản canonical.
 
-## 3. Entity resolution
+## 3. Entity Resolution
 
-Manual aliases are applied first. Remaining mentions use FAISS inner-product ANN with cosine threshold `0.90`, followed by a lexical guard: suffixes are removed and normalized names must match or have `SequenceMatcher >= 0.72`. Union-Find produces canonical clusters. The audit records `MERGE_MANUAL`, `MERGE_VECTOR` and `REJECT_GUARD`.
+Các alias thủ công được áp dụng trước. Những mention còn lại được tìm ứng viên bằng FAISS inner-product ANN với ngưỡng cosine `0.90`, sau đó qua lexical guard: loại bỏ hậu tố và yêu cầu tên chuẩn hóa giống nhau hoặc có `SequenceMatcher >= 0.72`. Union-Find tạo các cluster canonical. Bảng audit ghi các quyết định `MERGE_MANUAL`, `MERGE_VECTOR` và `REJECT_GUARD`.
 
-## 4. Neo4j ingestion
+## 4. Nạp dữ liệu vào Neo4j
 
-Nodes and edges are written with `UNWIND $rows AS row` in batches of 1000. Every edge carries `source_chunk_id`, `published_date`, `evidence` and `confidence`. The required provenance query must return zero invalid edges.
+Node và edge được ghi bằng `UNWIND $rows AS row`, theo batch 1000 bản ghi. Mỗi edge có `source_chunk_id`, `published_date`, `evidence` và `confidence`. Truy vấn kiểm tra provenance bắt buộc phải trả về 0 cạnh không hợp lệ.
 
-## 5. Retrieval
+## 5. Kiến trúc truy hồi
 
-Flat RAG uses normalized MiniLM embeddings and FAISS `IndexFlatIP`, retrieving top-k chunks. Hybrid GraphRAG extracts seed entities with Groq, resolves exact aliases first and uses embedding fallback at `0.66`. BFS uses two hops, caps super-nodes at 50 newest edges, caps total edges at 250, and caps graph context at 14,000 characters.
+Flat RAG dùng embedding MiniLM đã chuẩn hóa và FAISS `IndexFlatIP` để lấy top-k chunks. Hybrid GraphRAG dùng Groq trích xuất seed entity, ưu tiên khớp chính xác/alias và dùng embedding fallback với ngưỡng `0.66`. BFS tối đa hai hop, giới hạn super-node còn 50 cạnh mới nhất, giới hạn tổng 250 cạnh và giới hạn context đồ thị 14.000 ký tự.
 
-## 6. Evaluation
+## 6. Đánh giá
 
-The local detailed golden dataset is loaded from `data/graphrag_golden_50_first5000_detailed.csv`. The lab run evaluates five rows to control Groq usage; the runner checkpoints each row and exports both required CSV files.
+Bộ golden local được đọc từ `data/graphrag_golden_50_first5000_detailed.csv`. Lần chạy lab đánh giá 5 câu để kiểm soát quota Groq; runner checkpoint sau từng câu và xuất đủ hai file CSV bắt buộc.
 
-## 7. AI-agent control
+## 7. Kiểm soát AI Coding Agent
 
-The agent was not allowed to introduce a global pairwise cosine `O(N²)` deduplication pass. API calls are serialized through the Groq RPM limiter, with bounded retry/backoff and JSON parsing fallback.
+Không sử dụng phép so sánh cosine pairwise `O(N²)` trên toàn bộ dữ liệu. Các request Groq được tuần tự hóa qua RPM limiter, có retry/backoff giới hạn và parser JSON dự phòng.
 
-## 8. Scale trade-off
+## 8. Đánh đổi khi scale
 
-GraphRAG adds extraction, canonicalization and graph-ingestion cost, but improves multi-hop and provenance-aware retrieval. Flat RAG is cheaper and often faster for single-hop factoids. At larger scale, batching, ANN indexes, queue-based extraction, checkpointing and incremental graph updates are required.
+GraphRAG tốn thêm chi phí trích xuất, canonicalization và nạp đồ thị nhưng hỗ trợ tốt hơn cho câu hỏi multi-hop và provenance. Flat RAG rẻ và thường nhanh hơn với factoid single-hop. Khi scale, cần batching, ANN index, hàng đợi extraction, checkpoint và cập nhật đồ thị tăng dần.

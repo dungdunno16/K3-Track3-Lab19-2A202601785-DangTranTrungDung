@@ -1,26 +1,26 @@
-# Failure Analysis — Lab 19
+# Phân tích ca lỗi — Lab 19
 
-## Observed failure classes
+## Các nhóm lỗi cần theo dõi
 
-### JSON extraction failure
+### Lỗi trích xuất JSON
 
-Groq may return multiple JSON objects, markdown or malformed punctuation. The wrapper now tries JSON mode, retries without JSON mode, and uses `JSONDecoder.raw_decode()` to recover the first valid object. Failed batches remain in `extraction_errors_df` instead of silently becoming facts.
+Groq có thể trả nhiều JSON liên tiếp, markdown hoặc dấu câu sai. Wrapper trước tiên thử JSON mode, sau đó retry không bật JSON mode và dùng `JSONDecoder.raw_decode()` để lấy object hợp lệ đầu tiên. Các batch lỗi vẫn được lưu trong `extraction_errors_df`, không biến thành fact ngầm.
 
-### False coreference
+### Phân giải đồng tham chiếu sai
 
-An ambiguous “the company” can resolve to the wrong antecedent. The safe policy is to keep the original mention and record it in `unresolved_mentions`; the downstream extractor must not invent a replacement entity.
+Tham chiếu như “the company” có thể trỏ nhầm về thực thể trước đó. Chính sách an toàn là giữ nguyên mention gốc và ghi vào `unresolved_mentions`; extractor không được tự bịa thực thể thay thế.
 
-### False entity merge
+### Merge thực thể sai
 
-Embedding similarity alone can merge names such as a company and its product, or two people with similar names. The lexical guard, type separation, manual alias map and audit table reduce this risk. Rejected high-similarity pairs should be reviewed from `entity_resolution_audit_df`.
+Chỉ dùng embedding có thể gộp nhầm công ty với sản phẩm hoặc hai người có tên gần giống. Lexical guard, phân biệt type, alias thủ công và bảng audit giúp giảm rủi ro. Các cặp có similarity cao nhưng bị từ chối cần được kiểm tra trong `entity_resolution_audit_df`.
 
-### Flat vs GraphRAG
+### Flat RAG và GraphRAG
 
-Flat RAG can miss a multi-hop answer when the supporting facts are in separate chunks. GraphRAG can fail when seed extraction misses an entity, extraction omits an edge, or the super-node cap removes a historically relevant edge. The evaluation CSV records both answers, judge rationales and super-node events for bottom-N analysis.
+Flat RAG có thể bỏ sót câu trả lời multi-hop khi bằng chứng nằm ở nhiều chunk khác nhau. GraphRAG có thể thất bại nếu seed extraction bỏ sót entity, extraction thiếu edge hoặc super-node cap loại mất cạnh lịch sử. File evaluation ghi lại cả hai câu trả lời, lý do của judge và số lần kích hoạt super-node để phân tích nhóm kết quả thấp nhất.
 
-## Required evidence after execution
+## Bằng chứng cần bổ sung sau khi chạy
 
-- Use `extraction_errors_df` to report failed extraction batches.
-- Use `entity_resolution_audit_df` to report at least one `REJECT_GUARD` pair.
-- Use `top_degree_df` and `graph_debug.diagnostics` to report super-node behavior.
-- Use `outputs/graphrag_eval_results.csv` to select one Flat-RAG failure and one GraphRAG failure.
+- Dùng `extraction_errors_df` để thống kê các batch extraction lỗi.
+- Dùng `entity_resolution_audit_df` để trích dẫn ít nhất một cặp `REJECT_GUARD`.
+- Dùng `top_degree_df` và `graph_debug.diagnostics` để phân tích super-node.
+- Dùng `outputs/graphrag_eval_results.csv` để chọn một ca Flat RAG thất bại và một ca GraphRAG thất bại.
